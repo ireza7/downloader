@@ -4,3 +4,4 @@
 # https://example.com/file1.pdf
 # https://example.com/file2.jpg
 # /zip
+https://github.com/sartoopjj/github-sandbox/archive/refs/heads/main.zip
