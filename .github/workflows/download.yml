@@ -9,10 +9,10 @@ jobs:
   download:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: write        # نیاز به commit و push
 
     steps:
-      - name: Checkout
+      - name: Checkout repo
         uses: actions/checkout@v4
 
       - name: Setup Go
@@ -20,7 +20,7 @@ jobs:
         with:
           go-version: '1.22'
 
-      - name: Download files
+      - name: Parse trigger and download
         run: go run download.go
 
       - name: Commit and reset trigger
@@ -29,15 +29,18 @@ jobs:
           git config user.email "actions@github.com"
           git add downloads/ || true
           
-          # اگر چیزی تغییر کرده بود کامیت کن
+          # اگر تغییراتی در downloads بود commit کن
           if ! git diff --cached --quiet; then
             git commit -m "Add downloaded file(s)"
           fi
           
-          # بازنشانی فایل محرک و کامیت دوم با [skip ci]
+          # بازنشانی فایل محرک به حالت اولیه (با کامنت‌های راهنما)
           cat > trigger_download.txt << 'EOF'
-# لینک‌های دانلود را در خطوط زیر وارد کنید (هر خط یک لینک)
-# مثال: https://example.com/file.pdf
+# اگر لینک های خود را در زیر این کامنت وارد کنید فایل ها بدون تغییر به صورت ساده ذخیره میشوند
+
+# اگر لینک هارا زیر این کامنت وارد کنید همه فایل ها در یک فایل فشرده زیپ ذخیره میشوند
+
+# اگر لینک هارا زیر این کامنت وارد کنید هر فایل به صورت یک فایل فشرده زیپ ذخیره میشوند
 
 EOF
           git add trigger_download.txt

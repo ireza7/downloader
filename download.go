@@ -30,30 +30,91 @@ func main() {
 		log.Fatal("cannot read trigger file")
 	}
 	lines := strings.Split(string(data), "\n")
-	var urls []string
-	forceZip := false
+
+	// جداکننده‌های بخش‌ها
+	simpleComment := "# اگر لینک های خود را در زیر این کامنت وارد کنید فایل ها بدون تغییر به صورت ساده ذخیره میشوند"
+	zipAllComment := "# اگر لینک هارا زیر این کامنت وارد کنید همه فایل ها در یک فایل فشرده زیپ ذخیره میشوند"
+	zipEachComment := "# اگر لینک هارا زیر این کامنت وارد کنید هر فایل به صورت یک فایل فشرده زیپ ذخیره میشوند"
+
+	// حالت‌ها
+	var (
+		simpleUrls []string
+		zipAllUrls []string
+		zipEachUrls []string
+		currentMode string
+	)
+
+	urlRegex := regexp.MustCompile(`https?://[^\s]+`)
+
 	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			// تشخیص کامنت‌های مود
+			if strings.Contains(trimmed, "بدون تغییر") || trimmed == simpleComment {
+				currentMode = "simple"
+			} else if strings.Contains(trimmed, "همه فایل ها در یک فایل") || trimmed == zipAllComment {
+				currentMode = "zipall"
+			} else if strings.Contains(trimmed, "هر فایل به صورت یک فایل") || trimmed == zipEachComment {
+				currentMode = "zipeach"
+			}
 			continue
 		}
-		// تشخیص flag فشرده‌سازی
-		if strings.ToLower(line) == "/zip" {
-			forceZip = true
-			continue
+		// استخراج لینک‌ها از خط
+		urls := urlRegex.FindAllString(trimmed, -1)
+		switch currentMode {
+		case "simple":
+			simpleUrls = append(simpleUrls, urls...)
+		case "zipall":
+			zipAllUrls = append(zipAllUrls, urls...)
+		case "zipeach":
+			zipEachUrls = append(zipEachUrls, urls...)
+		default:
+			// بدون حالت مشخص، پیش‌فرض ساده
+			simpleUrls = append(simpleUrls, urls...)
 		}
-		re := regexp.MustCompile(`https?://[^\s]+`)
-		found := re.FindAllString(line, -1)
-		urls = append(urls, found...)
-	}
-	if len(urls) == 0 {
-		log.Println("No URLs found. Exiting.")
-		return
 	}
 
 	os.MkdirAll(downloadDir, 0755)
 
-	filesMap := make(map[string][]byte)
+	// پردازش هر گروه
+	if len(simpleUrls) > 0 {
+		processSimple(simpleUrls)
+	}
+	if len(zipAllUrls) > 0 {
+		processZipAll(zipAllUrls)
+	}
+	if len(zipEachUrls) > 0 {
+		processZipEach(zipEachUrls)
+	}
+}
+
+func downloadFile(urlStr string) ([]byte, error) {
+	req, err := http.NewRequest("GET", urlStr, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("status %d", resp.StatusCode)
+	}
+	return io.ReadAll(resp.Body)
+}
+
+func guessFileName(rawURL string) string {
+	parsed, _ := url.Parse(rawURL)
+	fname := path.Base(parsed.Path)
+	if fname == "" || fname == "." {
+		fname = "downloaded_file"
+	}
+	return fname
+}
+
+func downloadAll(urls []string) map[string][]byte {
+	files := make(map[string][]byte)
 	var mu sync.Mutex
 	sem := make(chan struct{}, maxParallel)
 	var wg sync.WaitGroup
@@ -64,62 +125,78 @@ func main() {
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			req, _ := http.NewRequest("GET", dlURL, nil)
-			resp, err := httpClient.Do(req)
+			data, err := downloadFile(dlURL)
 			if err != nil {
-				log.Printf("download error %s: %v\n", dlURL, err)
+				log.Printf("Error downloading %s: %v", dlURL, err)
 				return
 			}
-			defer resp.Body.Close()
-			if resp.StatusCode != 200 {
-				log.Printf("bad status %s: %d\n", dlURL, resp.StatusCode)
-				return
-			}
-			body, _ := io.ReadAll(resp.Body)
 			fname := guessFileName(dlURL)
 			mu.Lock()
-			filesMap[fname] = body
+			files[fname] = data
 			mu.Unlock()
 		}(u)
 	}
 	wg.Wait()
+	return files
+}
 
-	if len(filesMap) == 0 {
-		log.Fatal("No files downloaded.")
+func processSimple(urls []string) {
+	files := downloadAll(urls)
+	for name, data := range files {
+		path := filepath.Join(downloadDir, name)
+		if err := os.WriteFile(path, data, 0644); err != nil {
+			log.Printf("Error writing file %s: %v", name, err)
+		}
 	}
+	log.Println("Simple download completed.")
+}
 
-	// اگر چند فایل بود یا flag بود، zip کن
-	if len(filesMap) > 1 || forceZip {
-		zipName := fmt.Sprintf("archive_%d.zip", time.Now().Unix())
+func processZipAll(urls []string) {
+	files := downloadAll(urls)
+	if len(files) == 0 {
+		return
+	}
+	zipName := fmt.Sprintf("archive_%d.zip", time.Now().Unix())
+	zipPath := filepath.Join(downloadDir, zipName)
+	zipFile, err := os.Create(zipPath)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer zipFile.Close()
+	w := zip.NewWriter(zipFile)
+	for name, data := range files {
+		f, err := w.Create(name)
+		if err != nil {
+			log.Printf("Error creating entry %s: %v", name, err)
+			continue
+		}
+		f.Write(data)
+	}
+	w.Close()
+	log.Println("ZipAll archive created:", zipName)
+}
+
+func processZipEach(urls []string) {
+	files := downloadAll(urls)
+	suffix := time.Now().Unix()
+	for name, data := range files {
+		zipName := fmt.Sprintf("%s_%d.zip", strings.TrimSuffix(name, filepath.Ext(name)), suffix)
 		zipPath := filepath.Join(downloadDir, zipName)
 		zipFile, err := os.Create(zipPath)
 		if err != nil {
-			log.Fatal(err)
+			log.Printf("Error creating zip for %s: %v", name, err)
+			continue
 		}
-		defer zipFile.Close()
 		w := zip.NewWriter(zipFile)
-		for name, content := range filesMap {
-			f, _ := w.Create(name)
-			f.Write(content)
+		f, err := w.Create(name)
+		if err != nil {
+			zipFile.Close()
+			log.Printf("Error adding %s to zip: %v", name, err)
+			continue
 		}
+		f.Write(data)
 		w.Close()
-	} else {
-		// تک فایل
-		for name, content := range filesMap {
-			outPath := filepath.Join(downloadDir, name)
-			os.WriteFile(outPath, content, 0644)
-			break
-		}
+		zipFile.Close()
 	}
-
-	log.Println("Download completed. Files saved.")
-}
-
-func guessFileName(rawURL string) string {
-	parsed, _ := url.Parse(rawURL)
-	fname := path.Base(parsed.Path)
-	if fname == "" || fname == "." {
-		fname = "downloaded_file"
-	}
-	return fname
+	log.Println("ZipEach completed.")
 }

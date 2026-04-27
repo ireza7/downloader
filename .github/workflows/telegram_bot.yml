@@ -2,19 +2,20 @@ name: Telegram Bot (Hourly Long Poll)
 
 on:
   schedule:
-    - cron: '0 * * * *'         # هر ۱ ساعت
+    - cron: '0 * * * *'      # اجرای ساعتی
   workflow_dispatch:
 
 concurrency:
-  group: telegram-bot
-  cancel-in-progress: true      # لغو اجرای قبلی و جایگزینی با جدید
+  group: telegram-bot        # اطمینان از اجرای تک‌نمونه
+  cancel-in-progress: true   # اجرای قبلی در صورت شروع جدید لغو شود
 
 jobs:
   bot:
     runs-on: ubuntu-latest
-    timeout-minutes: 55         # کمی کمتر از ۶۰ دقیقه، تقریباً بدون وقفه
+    timeout-minutes: 55      # حداکثر ۵۵ دقیقه (وقفه‌ای کمتر از ۵ دقیقه)
     permissions:
-      contents: write
+      contents: write        # نیاز به نوشتن offset.txt
+      actions: write         # نیاز به dispatch کردن ورک‌فلو دانلود
 
     steps:
       - name: Checkout repo
@@ -23,12 +24,12 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22'    # یا نسخه‌ی پایدار
+          go-version: '1.22'
 
       - name: Run Telegram Bot
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-          GH_PAT: ${{ secrets.GH_PAT }}          # توکن گیتهاب با دسترسی repo
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}   # توکن خودکار گیتهاب با دسترسی actions:write
           REPO_OWNER: ${{ github.repository_owner }}
           REPO_NAME: ${{ github.event.repository.name }}
         run: go run bot.go
