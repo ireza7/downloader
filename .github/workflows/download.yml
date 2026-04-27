@@ -9,7 +9,7 @@ jobs:
   download:
     runs-on: ubuntu-latest
     permissions:
-      contents: write        # نیاز به commit و push
+      contents: write
 
     steps:
       - name: Checkout repo
@@ -28,21 +28,22 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "actions@github.com"
           git add downloads/ || true
-          
+
           # اگر تغییراتی در downloads بود commit کن
           if ! git diff --cached --quiet; then
             git commit -m "Add downloaded file(s)"
           fi
-          
-          # بازنشانی فایل محرک به حالت اولیه (با کامنت‌های راهنما)
-          cat > trigger_download.txt << 'EOF'
-# اگر لینک های خود را در زیر این کامنت وارد کنید فایل ها بدون تغییر به صورت ساده ذخیره میشوند
 
-# اگر لینک هارا زیر این کامنت وارد کنید همه فایل ها در یک فایل فشرده زیپ ذخیره میشوند
+          # بازنشانی فایل محرک به حالت اولیه
+          {
+            echo '# اگر لینک های خود را در زیر این کامنت وارد کنید فایل ها بدون تغییر به صورت ساده ذخیره میشوند'
+            echo ''
+            echo '# اگر لینک هارا زیر این کامنت وارد کنید همه فایل ها در یک فایل فشرده زیپ ذخیره میشوند'
+            echo ''
+            echo '# اگر لینک هارا زیر این کامنت وارد کنید هر فایل به صورت یک فایل فشرده زیپ ذخیره میشوند'
+            echo ''
+          } > trigger_download.txt
 
-# اگر لینک هارا زیر این کامنت وارد کنید هر فایل به صورت یک فایل فشرده زیپ ذخیره میشوند
-
-EOF
           git add trigger_download.txt
           git commit -m "Reset trigger file [skip ci]"
           git push
