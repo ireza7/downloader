@@ -1,35 +1,39 @@
-name: Telegram Bot (Hourly Long Poll)
+name: Telegram Bot (5min Poll)
 
 on:
   schedule:
-    - cron: '0 * * * *'      # اجرای ساعتی
+    - cron: '*/5 * * * *'       # هر ۵ دقیقه
   workflow_dispatch:
 
 concurrency:
-  group: telegram-bot        # اطمینان از اجرای تک‌نمونه
-  cancel-in-progress: true   # اجرای قبلی در صورت شروع جدید لغو شود
+  group: telegram-bot
+  cancel-in-progress: true
 
 jobs:
   bot:
     runs-on: ubuntu-latest
-    timeout-minutes: 55      # حداکثر ۵۵ دقیقه (وقفه‌ای کمتر از ۵ دقیقه)
     permissions:
-      contents: write        # نیاز به نوشتن offset.txt
-      actions: write         # نیاز به dispatch کردن ورک‌فلو دانلود
-
+      contents: write
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
           go-version: '1.22'
-
-      - name: Run Telegram Bot
+          cache: true
+      - name: Run bot
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}   # توکن خودکار گیتهاب با دسترسی actions:write
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO_OWNER: ${{ github.repository_owner }}
           REPO_NAME: ${{ github.event.repository.name }}
         run: go run bot.go
+      - name: Commit offset file
+        if: always()
+        run: |
+          if [ -n "$(git status --porcelain offset.txt)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "actions@github.com"
+            git add offset.txt
+            git commit -m "Update offset [skip ci]"
+            git push
+          fi
