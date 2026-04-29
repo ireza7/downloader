@@ -20,8 +20,8 @@ var (
 	triggerFile = "trigger_download.txt"
 	downloadDir = "downloads"
 	httpClient  = &http.Client{Timeout: 60 * time.Second}
-	maxParallel = 5   // حداکثر دانلود هم‌زمان فایل
-	maxChunks   = 4   // تعداد تکه‌ها برای دانلود موازی
+	maxParallel = 5
+	maxChunks   = 4
 )
 
 func main() {
@@ -31,7 +31,6 @@ func main() {
 	}
 	lines := strings.Split(string(data), "\n")
 
-	// کامنت‌های مرزی
 	simpleComment := "# اگر لینک های خود را در زیر این کامنت وارد کنید فایل ها بدون تغییر به صورت ساده ذخیره میشوند"
 	zipAllComment := "# اگر لینک هارا زیر این کامنت وارد کنید همه فایل ها در یک فایل فشرده زیپ ذخیره میشوند"
 	zipEachComment := "# اگر لینک هارا زیر این کامنت وارد کنید هر فایل به صورت یک فایل فشرده زیپ ذخیره میشوند"
@@ -83,8 +82,6 @@ func main() {
 	}
 }
 
-// ========== دانلود تکه‌ای + نام واقعی ==========
-
 func downloadFileWithChunks(rawURL string) ([]byte, string, error) {
 	headReq, _ := http.NewRequest("HEAD", rawURL, nil)
 	headResp, err := httpClient.Do(headReq)
@@ -102,7 +99,6 @@ func downloadFileWithChunks(rawURL string) ([]byte, string, error) {
 		return downloadChunked(rawURL, contentLength, finalURL)
 	}
 
-	// دانلود عادی
 	req, _ := http.NewRequest("GET", rawURL, nil)
 	resp, err := httpClient.Do(req)
 	if err != nil {
@@ -243,8 +239,6 @@ func downloadAll(urls []string) map[string][]byte {
 	return files
 }
 
-// ========== سه حالت ذخیره ==========
-
 func processSimple(urls []string) {
 	files := downloadAll(urls)
 	for name, data := range files {
@@ -285,7 +279,6 @@ func processZipEach(urls []string) {
 	files := downloadAll(urls)
 	suffix := time.Now().Unix()
 	for name, data := range files {
-		archive := map[string][]byte{name: data}
 		zipName := fmt.Sprintf("%s_%d.zip", strings.TrimSuffix(name, filepath.Ext(name)), suffix)
 		zipPath := filepath.Join(downloadDir, zipName)
 		zipFile, err := os.Create(zipPath)

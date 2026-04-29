@@ -19,8 +19,6 @@ import (
 	"time"
 )
 
-// ========== ساختارهای تلگرام ==========
-
 type Update struct {
 	UpdateID int      `json:"update_id"`
 	Message  *Message `json:"message"`
@@ -40,8 +38,6 @@ type GetUpdatesResponse struct {
 	Result []Update `json:"result"`
 }
 
-// ========== متغیرهای سراسری ==========
-
 var (
 	telegramToken string
 	ghToken       string
@@ -49,11 +45,11 @@ var (
 	repoName      string
 	offsetFile    = "offset.txt"
 	downloadDir   = "downloads"
-	baseURL       = "https://tapi.bale.ai/bot" // سرور بله (برای تلگرام تغییر دهید)
+	baseURL       = "https://tapi.bale.ai/bot"
 	githubAPIBase = "https://api.github.com"
-	httpClient    = &http.Client{Timeout: 60 * time.Second} // تایم‌اوت بیشتر برای فایل‌های حجیم
-	maxParallel   = 5                                        // حداکثر دانلود هم‌زمان فایل
-	maxChunks     = 4                                        // تعداد تکه‌ها برای دانلود موازی
+	httpClient    = &http.Client{Timeout: 60 * time.Second}
+	maxParallel   = 5
+	maxChunks     = 4
 )
 
 func main() {
@@ -68,7 +64,6 @@ func main() {
 
 	offset := getOffset()
 
-	// دریافت آپدیت‌های جدید (تایم‌اوت کوتاه)
 	resp, err := httpClient.Get(fmt.Sprintf(
 		"%s%s/getUpdates?offset=%d&timeout=5",
 		baseURL, telegramToken, offset,
@@ -87,7 +82,6 @@ func main() {
 		return
 	}
 
-	// ===== پشتیبانی از /cancel =====
 	cancelChats := map[int64]bool{}
 	for _, upd := range updatesResp.Result {
 		if upd.Message != nil && strings.TrimSpace(upd.Message.Text) == "/cancel" {
@@ -95,7 +89,6 @@ func main() {
 		}
 	}
 
-	// پردازش پیام‌ها
 	needCommit := false
 	for _, upd := range updatesResp.Result {
 		offset = upd.UpdateID + 1
@@ -109,11 +102,9 @@ func main() {
 		text := upd.Message.Text
 
 		if strings.TrimSpace(text) == "/cancel" {
-			// پیام لغو را رد کن، جلوتر پیام مناسب داده می‌شود
 			continue
 		}
 
-		// اگر برای این کاربر درخواست لغو ثبت شده بود، دانلود نکن
 		if cancelChats[chatID] {
 			sendMessage(chatID, "درخواست دانلود شما لغو شد.")
 			continue
@@ -122,13 +113,10 @@ func main() {
 		handleMessage(chatID, text)
 	}
 
-	// ذخیره offset جدید در ریپو
 	if needCommit {
 		commitOffsetFile(offset)
 	}
 }
-
-// ========== مدیریت پیام ==========
 
 func handleMessage(chatID int64, text string) {
 	switch {
@@ -147,7 +135,6 @@ func handleMessage(chatID int64, text string) {
 		return
 	}
 
-	// تشخیص مود
 	mode := ""
 	t := text
 	if strings.HasPrefix(t, "/simple") {
@@ -192,8 +179,6 @@ func handleMessage(chatID int64, text string) {
 	}
 }
 
-// ========== عملیات گیتهاب ==========
-
 func commitFileToRepo(path string, content []byte) error {
 	apiURL := fmt.Sprintf("%s/repos/%s/%s/contents/%s", githubAPIBase, repoOwner, repoName, path)
 	sha := ""
@@ -216,7 +201,7 @@ func commitFileToRepo(path string, content []byte) error {
 	req, _ := http.NewRequest("PUT", apiURL, bytes.NewReader(body))
 	req.Header.Set("Authorization", "token "+ghToken)
 	req.Header.Set("Content-Type", "application/json")
-	resp, err = httpClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return err
 	}
@@ -273,11 +258,7 @@ func commitZipEach(chatID int64, files map[string][]byte) {
 	}
 }
 
-// ========== دانلود با نام واقعی + تکه‌ای ==========
-
-// downloadFileWithChunks فایل را دانلود کرده و نام واقعی را برمی‌گرداند
 func downloadFileWithChunks(rawURL string) ([]byte, string, error) {
-	// ابتدا HEAD برای بررسی پشتیبانی از Range
 	headReq, _ := http.NewRequest("HEAD", rawURL, nil)
 	headResp, err := httpClient.Do(headReq)
 	if err != nil {
@@ -285,41 +266,32 @@ func downloadFileWithChunks(rawURL string) ([]byte, string, error) {
 	}
 	headResp.Body.Close()
 
-	// تشخیص نام واقعی از هدر Content-Disposition یا URL نهایی
 	finalURL := headResp.Request.URL.String()
 	fileName := extractFileName(finalURL, headResp.Header.Get("Content-Disposition"))
 
-	// اگر سرور از Range پشتیبانی کند و طول محتوا مشخص باشد، دانلود تکه‌ای
 	acceptRanges := headResp.Header.Get("Accept-Ranges")
 	contentLength := headResp.ContentLength
 	if acceptRanges == "bytes" && contentLength > 0 {
-		// دانلود تکه‌ای
 		return downloadChunked(rawURL, contentLength, finalURL)
 	}
 
-	// در غیر این صورت دانلود عادی
 	req, _ := http.NewRequest("GET", rawURL, nil)
-	getResp, err := httpClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, "", err
 	}
-	defer getResp.Body.Close()
-	if getResp.StatusCode != http.StatusOK {
-		return nil, "", fmt.Errorf("status %d", getResp.StatusCode)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, "", fmt.Errorf("status %d", resp.StatusCode)
 	}
-	data, err := io.ReadAll(getResp.Body)
-	if err != nil {
-		return nil, "", err
-	}
-	// نام فایل را از URL نهایی و هدر پاسخ هم می‌توان گرفت
-	fileName = extractFileName(getResp.Request.URL.String(), getResp.Header.Get("Content-Disposition"))
+	data, _ := io.ReadAll(resp.Body)
+	fileName = extractFileName(resp.Request.URL.String(), resp.Header.Get("Content-Disposition"))
 	return data, fileName, nil
 }
 
 func downloadChunked(rawURL string, totalSize int64, finalURL string) ([]byte, string, error) {
 	chunkSize := totalSize / int64(maxChunks)
 	if chunkSize < 1024 {
-		// اگر فایل خیلی کوچک است، تکه‌ای نکن
 		req, _ := http.NewRequest("GET", rawURL, nil)
 		resp, err := httpClient.Do(req)
 		if err != nil {
@@ -343,7 +315,7 @@ func downloadChunked(rawURL string, totalSize int64, finalURL string) ([]byte, s
 			start := int64(idx) * chunkSize
 			end := start + chunkSize - 1
 			if idx == maxChunks-1 {
-				end = totalSize - 1 // آخرین تکه تا انتها
+				end = totalSize - 1
 			}
 			req, _ := http.NewRequest("GET", rawURL, nil)
 			req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", start, end))
@@ -371,17 +343,15 @@ func downloadChunked(rawURL string, totalSize int64, finalURL string) ([]byte, s
 
 	for _, e := range errs {
 		if e != nil {
-			// خطا: برگشت به دانلود عادی (یا بازگشت خطا)
 			return downloadSingle(rawURL, finalURL)
 		}
 	}
 
-	// چسباندن تکه‌ها
 	buf := make([]byte, 0, totalSize)
 	for _, chunk := range chunks {
 		buf = append(buf, chunk...)
 	}
-	fname := extractFileName(finalURL, "") // Content-Disposition در اینجا نداریم
+	fname := extractFileName(finalURL, "")
 	return buf, fname, nil
 }
 
@@ -395,16 +365,12 @@ func downloadSingle(rawURL, finalURL string) ([]byte, string, error) {
 	if resp.StatusCode != http.StatusOK {
 		return nil, "", fmt.Errorf("status %d", resp.StatusCode)
 	}
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, "", err
-	}
+	data, _ := io.ReadAll(resp.Body)
 	fname := extractFileName(resp.Request.URL.String(), resp.Header.Get("Content-Disposition"))
 	return data, fname, nil
 }
 
 func extractFileName(urlStr, contentDisposition string) string {
-	// اولویت با Content-Disposition
 	if contentDisposition != "" {
 		re := regexp.MustCompile(`filename\*?=(?:UTF-8'')?["']?([^"'; \s]+)`)
 		match := re.FindStringSubmatch(contentDisposition)
@@ -412,7 +378,6 @@ func extractFileName(urlStr, contentDisposition string) string {
 			return match[1]
 		}
 	}
-	// از URL نهایی
 	parsed, _ := url.Parse(urlStr)
 	fname := path.Base(parsed.Path)
 	if fname == "" || fname == "." {
@@ -439,7 +404,6 @@ func downloadAll(urls []string) map[string][]byte {
 				return
 			}
 			mu.Lock()
-			// جلوگیری از بازنویسی نام‌های تکراری (اختیاری)
 			if _, exists := files[fname]; exists {
 				fname = fmt.Sprintf("%d_%s", time.Now().UnixNano(), fname)
 			}
@@ -465,8 +429,6 @@ func createZipArchive(files map[string][]byte) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// ========== ابزارهای کمکی ==========
-
 func getOffset() int {
 	data, _ := os.ReadFile(offsetFile)
 	off, _ := strconv.Atoi(strings.TrimSpace(string(data)))
@@ -479,7 +441,6 @@ func saveOffset(offset int) {
 
 func commitOffsetFile(off int) {
 	saveOffset(off)
-	// کامیت offset در یک مرحله جداگانه (در workflow انجام می‌شود)
 }
 
 func sendMessage(chatID int64, text string) {
