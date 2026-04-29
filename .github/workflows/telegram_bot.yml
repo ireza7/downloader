@@ -2,7 +2,7 @@ name: Telegram Bot (5min Poll)
 
 on:
   schedule:
-    - cron: '*/5 * * * *'       # هر ۵ دقیقه
+    - cron: '*/5 * * * *'
   workflow_dispatch:
 
 concurrency:
@@ -12,28 +12,39 @@ concurrency:
 jobs:
   bot:
     runs-on: ubuntu-latest
+    container: python:3.11-alpine
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Cache pip
+        uses: actions/cache@v4
         with:
-          go-version: '1.22'
-          cache: true
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: pip install requests
+
       - name: Run bot
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO_OWNER: ${{ github.repository_owner }}
           REPO_NAME: ${{ github.event.repository.name }}
-        run: go run bot.go
+        run: python bot.py
+
       - name: Commit offset file
         if: always()
         run: |
-          if [ -n "$(git status --porcelain offset.txt)" ]; then
-            git config user.name "github-actions[bot]"
-            git config user.email "actions@github.com"
-            git add offset.txt
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "actions@github.com"
+          git add offset.txt || true
+          if ! git diff --cached --quiet; then
             git commit -m "Update offset [skip ci]"
             git push
           fi

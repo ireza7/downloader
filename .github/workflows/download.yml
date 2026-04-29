@@ -8,42 +8,43 @@ on:
 jobs:
   download:
     runs-on: ubuntu-latest
+    container: python:3.11-alpine
     permissions:
       contents: write
-
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Setup Go
-        uses: actions/setup-go@v5
+      - name: Cache pip
+        uses: actions/cache@v4
         with:
-          go-version: '1.22'
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
 
-      - name: Parse trigger and download
-        run: go run download.go
+      - name: Install dependencies
+        run: pip install requests
 
-      - name: Commit and reset trigger
+      - name: Run downloader
+        run: python download_trigger.py
+
+      - name: Commit new files and reset trigger
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "actions@github.com"
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "actions@github.com"
           git add downloads/ || true
-
-          # اگر تغییراتی در downloads بود commit کن
           if ! git diff --cached --quiet; then
             git commit -m "Add downloaded file(s)"
           fi
+          cat > trigger_download.txt << 'EOF'
+# اگر لینک های خود را در زیر این کامنت وارد کنید فایل ها بدون تغییر به صورت ساده ذخیره میشوند
 
-          # بازنشانی فایل محرک به حالت اولیه
-          {
-            echo '# اگر لینک های خود را در زیر این کامنت وارد کنید فایل ها بدون تغییر به صورت ساده ذخیره میشوند'
-            echo ''
-            echo '# اگر لینک هارا زیر این کامنت وارد کنید همه فایل ها در یک فایل فشرده زیپ ذخیره میشوند'
-            echo ''
-            echo '# اگر لینک هارا زیر این کامنت وارد کنید هر فایل به صورت یک فایل فشرده زیپ ذخیره میشوند'
-            echo ''
-          } > trigger_download.txt
+# اگر لینک هارا زیر این کامنت وارد کنید همه فایل ها در یک فایل فشرده زیپ ذخیره میشوند
 
+# اگر لینک هارا زیر این کامنت وارد کنید هر فایل به صورت یک فایل فشرده زیپ ذخیره میشوند
+
+EOF
           git add trigger_download.txt
           git commit -m "Reset trigger file [skip ci]"
           git push
