@@ -1,35 +1,37 @@
-name: Download via Trigger File
+name: Telegram Bot (5min Poll)
 
 on:
-  push:
-    paths:
-      - 'trigger_download.txt'
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: telegram-bot
+  cancel-in-progress: true
 
 jobs:
-  download:
+  bot:
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
 
-      - name: Run downloader
-        run: python download_trigger.py
+      - name: Run bot
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO_OWNER: ${{ github.repository_owner }}
+          REPO_NAME: ${{ github.event.repository.name }}
+        run: python bot.py
 
-      - name: Commit and reset trigger
+      - name: Commit offset file
+        if: always()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "actions@github.com"
-          git add downloads/ || true
+          git add offset.txt || true
           if ! git diff --cached --quiet; then
-            git commit -m "Add downloaded file(s)"
+            git commit -m "Update offset [skip ci]"
+            git push
           fi
-          echo '# اگر لینک های خود را در زیر این کامنت وارد کنید فایل ها بدون تغییر به صورت ساده ذخیره میشوند' > trigger_download.txt
-          echo '' >> trigger_download.txt
-          echo '# اگر لینک هارا زیر این کامنت وارد کنید همه فایل ها در یک فایل فشرده زیپ ذخیره میشوند' >> trigger_download.txt
-          echo '' >> trigger_download.txt
-          echo '# اگر لینک هارا زیر این کامنت وارد کنید هر فایل به صورت یک فایل فشرده زیپ ذخیره میشوند' >> trigger_download.txt
-          echo '' >> trigger_download.txt
-          git add trigger_download.txt
-          git commit -m "Reset trigger file [skip ci]"
-          git push
