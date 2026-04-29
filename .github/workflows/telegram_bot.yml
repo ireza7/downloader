@@ -28,7 +28,9 @@ jobs:
             ${{ runner.os }}-pip-
 
       - name: Install dependencies
-        run: pip install requests
+        run: |
+          apk add --no-cache git
+          pip install requests
 
       - name: Run bot
         env:
