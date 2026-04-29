@@ -195,19 +195,33 @@ func downloadSingle(rawURL, finalURL string) ([]byte, string, error) {
 }
 
 func extractFileName(urlStr, contentDisposition string) string {
+	cdName := ""
 	if contentDisposition != "" {
 		re := regexp.MustCompile(`filename\*?=(?:UTF-8'')?["']?([^"'; \s]+)`)
 		match := re.FindStringSubmatch(contentDisposition)
 		if len(match) > 1 {
-			return match[1]
+			cdName = match[1]
 		}
 	}
 	parsed, _ := url.Parse(urlStr)
-	fname := path.Base(parsed.Path)
-	if fname == "" || fname == "." {
-		fname = "downloaded_file"
+	urlName := path.Base(parsed.Path)
+	if urlName == "" || urlName == "." {
+		urlName = ""
 	}
-	return fname
+	uuidRegex := regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+	if cdName != "" && (uuidRegex.MatchString(cdName) || !strings.Contains(cdName, ".")) {
+		if urlName != "" && !uuidRegex.MatchString(urlName) {
+			return urlName
+		}
+		return cdName
+	}
+	if cdName != "" {
+		return cdName
+	}
+	if urlName != "" {
+		return urlName
+	}
+	return "downloaded_file"
 }
 
 func downloadAll(urls []string) map[string][]byte {
