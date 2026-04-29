@@ -37,14 +37,12 @@ jobs:
           if ! git diff --cached --quiet; then
             git commit -m "Add downloaded file(s)"
           fi
-          cat > trigger_download.txt << 'EOF'
-# اگر لینک های خود را در زیر این کامنت وارد کنید فایل ها بدون تغییر به صورت ساده ذخیره میشوند
-
-# اگر لینک هارا زیر این کامنت وارد کنید همه فایل ها در یک فایل فشرده زیپ ذخیره میشوند
-
-# اگر لینک هارا زیر این کامنت وارد کنید هر فایل به صورت یک فایل فشرده زیپ ذخیره میشوند
-
-EOF
+          echo '# اگر لینک های خود را در زیر این کامنت وارد کنید فایل ها بدون تغییر به صورت ساده ذخیره میشوند' > trigger_download.txt
+          echo '' >> trigger_download.txt
+          echo '# اگر لینک هارا زیر این کامنت وارد کنید همه فایل ها در یک فایل فشرده زیپ ذخیره میشوند' >> trigger_download.txt
+          echo '' >> trigger_download.txt
+          echo '# اگر لینک هارا زیر این کامنت وارد کنید هر فایل به صورت یک فایل فشرده زیپ ذخیره میشوند' >> trigger_download.txt
+          echo '' >> trigger_download.txt
           git add trigger_download.txt
           git commit -m "Reset trigger file [skip ci]"
           git push
